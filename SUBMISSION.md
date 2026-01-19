@@ -78,7 +78,7 @@ consistent spacing and shadcn/ui components for polish.
 
 ## S3. Live Application Link
 
-**URL**: `[TO BE FILLED AFTER DEPLOYMENT]`
+**URL**: `https://sfl-web-waei.vercel.app/`
 
 ### Demo Instructions
 1. Visit the homepage
@@ -92,7 +92,7 @@ consistent spacing and shadcn/ui components for polish.
 
 ## S4. GitHub Repository Link
 
-**Repository**: `[TO BE FILLED AFTER PUSHING TO GITHUB]`
+**Repository**: `https://github.com/ryanborromeo/sfl`
 
 ### Tech Stack
 - **Backend**: NestJS + Prisma + SQLite
