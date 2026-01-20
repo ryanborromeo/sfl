@@ -1,71 +1,85 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RecipesService } from '../recipes/recipes.service';
+import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { nanoid } from 'nanoid';
-
-interface GeneratePlanDto {
-  days: number;
-  tagsInclude?: string[];
-  tagsExclude?: string[];
-  excludeIngredients?: string[];
-  maxCookTimeMins?: number;
-}
 
 @Injectable()
 export class PlansService {
+  private readonly logger = new Logger(PlansService.name);
+
   constructor(
     private prisma: PrismaService,
     private recipesService: RecipesService,
   ) {}
 
   async generate(dto: GeneratePlanDto) {
-    // Get filtered recipes
-    let recipes = await this.recipesService.findAll({
-      tags: dto.tagsInclude,
-      maxCookTimeMins: dto.maxCookTimeMins,
-      excludeIngredients: dto.excludeIngredients,
-    });
+    this.logger.log(`Generating ${dto.days}-day meal plan`);
 
-    // Exclude recipes with excluded tags
-    if (dto.tagsExclude && dto.tagsExclude.length > 0) {
-      recipes = recipes.filter((recipe) => {
-        const recipeTags = recipe.tags.split(',');
-        return !dto.tagsExclude!.some((tag) => recipeTags.includes(tag));
+    try {
+      // Get filtered recipes
+      let recipes = await this.recipesService.findAll({
+        tags: dto.tagsInclude,
+        maxCookTimeMins: dto.maxCookTimeMins,
+        excludeIngredients: dto.excludeIngredients,
       });
-    }
 
-    // Shuffle recipes for variety
-    const shuffled = [...recipes].sort(() => Math.random() - 0.5);
+      // Exclude recipes with excluded tags
+      if (dto.tagsExclude && dto.tagsExclude.length > 0) {
+        recipes = recipes.filter((recipe) => {
+          const recipeTags = recipe.tags.split(',');
+          return !dto.tagsExclude!.some((tag) => recipeTags.includes(tag));
+        });
+      }
 
-    // Calculate total meals needed
-    const mealsPerDay = 3;
-    const totalMeals = dto.days * mealsPerDay;
+      // Handle case where no recipes match the filters
+      if (recipes.length === 0) {
+        this.logger.warn('No recipes found matching the given criteria');
+        throw new BadRequestException(
+          'No recipes found matching your criteria. Try adjusting your filters.',
+        );
+      }
 
-    // Select recipes without repetition (cycle if not enough)
-    const selectedRecipes: typeof recipes = [];
-    for (let i = 0; i < totalMeals; i++) {
-      selectedRecipes.push(shuffled[i % shuffled.length]);
-    }
+      // Shuffle recipes for variety
+      const shuffled = [...recipes].sort(() => Math.random() - 0.5);
 
-    // Create plan with unique share code
-    const shareCode = nanoid(8);
+      // Calculate total meals needed
+      const mealsPerDay = 3;
+      const totalMeals = dto.days * mealsPerDay;
 
-    const plan = await this.prisma.plan.create({
-      data: {
-        shareCode,
-        days: dto.days,
-        constraints: JSON.stringify(dto),
-        meals: {
-          create: selectedRecipes.map((recipe, index) => ({
-            dayIndex: Math.floor(index / mealsPerDay),
-            mealType: ['breakfast', 'lunch', 'dinner'][index % mealsPerDay],
-            recipeId: recipe.id,
-          })),
+      // Select recipes without repetition (cycle if not enough)
+      const selectedRecipes: typeof recipes = [];
+      for (let i = 0; i < totalMeals; i++) {
+        selectedRecipes.push(shuffled[i % shuffled.length]);
+      }
+
+      // Create plan with unique share code
+      const shareCode = nanoid(8);
+
+      const plan = await this.prisma.plan.create({
+        data: {
+          shareCode,
+          days: dto.days,
+          constraints: JSON.stringify(dto),
+          meals: {
+            create: selectedRecipes.map((recipe, index) => ({
+              dayIndex: Math.floor(index / mealsPerDay),
+              mealType: ['breakfast', 'lunch', 'dinner'][index % mealsPerDay],
+              recipeId: recipe.id,
+            })),
+          },
         },
-      },
-    });
+      });
 
-    return { shareCode: plan.shareCode };
+      this.logger.log(`Plan created successfully with code: ${shareCode}`);
+      return { shareCode: plan.shareCode };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.error('Failed to generate plan', error);
+      throw new BadRequestException('Failed to generate meal plan. Please try again.');
+    }
   }
 
   async findByShareCode(shareCode: string) {

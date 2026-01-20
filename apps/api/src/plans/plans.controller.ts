@@ -1,19 +1,13 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, HttpCode, HttpStatus } from '@nestjs/common';
 import { PlansService } from './plans.service';
-
-interface GeneratePlanDto {
-  days: number;
-  tagsInclude?: string[];
-  tagsExclude?: string[];
-  excludeIngredients?: string[];
-  maxCookTimeMins?: number;
-}
+import { GeneratePlanDto } from './dto/generate-plan.dto';
 
 @Controller('plans')
 export class PlansController {
   constructor(private readonly plansService: PlansService) {}
 
   @Post('generate')
+  @HttpCode(HttpStatus.CREATED)
   async generate(@Body() dto: GeneratePlanDto) {
     return this.plansService.generate(dto);
   }
